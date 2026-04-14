@@ -37,22 +37,20 @@ def main():
         .build()
     )
 
-    group_filter = filters.ChatType.GROUPS | filters.ChatType.SUPERGROUP
-
-    # Commands
+    # Commands — work in all chat types
     app.add_handler(CommandHandler("start",   handlers.cmd_start))
     app.add_handler(CommandHandler("summary", handlers.cmd_summary))
     app.add_handler(CommandHandler("clear",   handlers.cmd_clear))
 
-    # Message types — listen silently in groups
+    # Message handlers — no chat type filter so the bot works in groups AND private chats
     app.add_handler(MessageHandler(
-        filters.TEXT & ~filters.COMMAND & group_filter, handlers.handle_text))
+        filters.TEXT & ~filters.COMMAND, handlers.handle_text))
     app.add_handler(MessageHandler(
-        filters.VOICE & group_filter, handlers.handle_voice))
+        filters.VOICE, handlers.handle_voice))
     app.add_handler(MessageHandler(
-        filters.PHOTO & group_filter, handlers.handle_photo))
+        filters.PHOTO, handlers.handle_photo))
     app.add_handler(MessageHandler(
-        filters.Document.ALL & group_filter, handlers.handle_document))
+        filters.Document.ALL, handlers.handle_document))
 
     logging.info("Bot is running. Press Ctrl+C to stop.")
     app.run_polling(drop_pending_updates=True)
