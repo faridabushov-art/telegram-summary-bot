@@ -26,7 +26,6 @@ async def post_init(application):
 
 
 def main():
-    # ── Validate env vars ────────────────────────────────────────────────────
     for var in ("TELEGRAM_BOT_TOKEN", "ANTHROPIC_API_KEY", "OPENAI_API_KEY"):
         if not os.getenv(var):
             raise ValueError(f"Missing required environment variable: {var}")
