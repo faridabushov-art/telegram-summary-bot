@@ -1,7 +1,7 @@
 """
 agent.py — LangGraph ReAct managed agent.
 
-All AI and storage logic lives here.  handlers.py calls only:
+All AI and storage logic lives here. handlers.py calls only:
   - process_message(...)
   - process_summary(...)
 
@@ -24,8 +24,7 @@ import storage
 logger = logging.getLogger(__name__)
 
 # ── Model (lazy) ─────────────────────────────────────────────────────────────
-# Instantiated on first use so that the module can be imported before .env
-# is loaded (e.g. during import-check in tests or CI).
+# Instantiated on first use so the module can be imported before .env is loaded.
 _llm: ChatAnthropic | None = None
 _agent = None
 
@@ -239,10 +238,9 @@ async def process_message(
     The agent decides which tools to call based on msg_type.
     No return value — the agent stores the result via tools.
     """
-    if msg_type == "text" or msg_type == "file":
+    if msg_type in ("text", "file"):
         payload_str = raw_payload if isinstance(raw_payload, str) else raw_payload.decode()
     else:
-        # voice / image — encode bytes to base64 string for tool input
         payload_str = (
             base64.b64encode(raw_payload).decode()
             if isinstance(raw_payload, (bytes, bytearray))
@@ -270,7 +268,6 @@ async def process_message(
 async def process_summary(chat_id: int, language: str = "English") -> str:
     """
     Generate a summary of the conversation in chat_id.
-    The agent retrieves history then builds the summary.
     Returns the summary text to be posted back to Telegram.
     """
     prompt = (
@@ -283,5 +280,4 @@ async def process_summary(chat_id: int, language: str = "English") -> str:
     )
 
     result = await _get_agent().ainvoke({"messages": [HumanMessage(content=prompt)]})
-    # The last message in the result is the agent's final answer
     return result["messages"][-1].content
