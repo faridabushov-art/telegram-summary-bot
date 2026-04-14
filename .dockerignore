@@ -1,29 +1,9 @@
-# Secrets — never bake into the image
 .env
-
-# Python cache
 __pycache__/
 *.py[cod]
-*.pyo
-*.pyd
-.Python
-
-# Local database (Railway provides a fresh volume mount at /data)
 *.db
 *.sqlite
-*.sqlite3
-
-# Dev / editor artefacts
 .git/
 .gitignore
-.DS_Store
-*.egg-info/
-dist/
-build/
-.venv/
-venv/
-env/
-
-# Docs (nice to have but not needed in the image)
 README.md
 CLAUDE.md
