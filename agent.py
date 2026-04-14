@@ -74,7 +74,10 @@ def build_summary(transcript: str, language: str = "English") -> str:
             f"You are a business assistant summarizing internal Telegram group "
             f"conversations between sales staff and ERP administrators. "
             f"Be concise and factual. Use bullet points. "
-            f"Do not invent information. Write in {language}."
+            f"Do not invent information. "
+            f"The conversation may be in Azerbaijani, Russian, English, or mixed. "
+            f"Write your summary in {language}. "
+            f"If SUMMARY_LANGUAGE is 'auto', detect the dominant language and use it."
         ),
         messages=[{
             "role": "user",
