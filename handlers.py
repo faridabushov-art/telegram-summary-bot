@@ -111,7 +111,11 @@ async def cmd_summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     try:
         language = os.getenv("SUMMARY_LANGUAGE", "English")
         summary = await agent.process_summary(update.effective_chat.id, language)
-        await update.message.reply_text(summary, parse_mode="Markdown")
+        # Try Markdown first; fall back to plain text if Telegram rejects the formatting
+        try:
+            await update.message.reply_text(summary, parse_mode="Markdown")
+        except Exception:
+            await update.message.reply_text(summary)
     except Exception:
         logger.exception("Failed to generate summary")
         await update.message.reply_text("⚠️ Could not generate summary. Please try again.")
