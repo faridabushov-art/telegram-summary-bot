@@ -52,7 +52,7 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
-        photo = update.message.photo[-1]  # largest resolution
+        photo = update.message.photo[-1]
         file = await context.bot.get_file(photo.file_id)
         img_bytes = bytes(await file.download_as_bytearray())
         caption = update.message.caption or ""
@@ -66,7 +66,6 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             mime_type="image/jpeg",
         )
 
-        # If there is a caption, store it as a follow-up text message
         if caption:
             await agent.process_message(
                 chat_id=update.effective_chat.id,
