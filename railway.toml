@@ -1,0 +1,22 @@
+[build]
+# Tell Railway to use our Dockerfile instead of Nixpacks auto-detection.
+dockerfile = "Dockerfile"
+
+[deploy]
+# Start command (mirrors the Dockerfile CMD — explicit here for clarity).
+startCommand = "python main.py"
+
+# Restart the container automatically if it crashes.
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 10
+
+# Health check: the bot process should stay alive.
+# Railway has no HTTP port to probe, so we rely on the restart policy above.
+# If you later add a /health HTTP endpoint, configure healthcheckPath here.
+
+[[deploy.volumeMounts]]
+# Mount the Railway persistent volume at /data so messages.db survives
+# every redeploy and container restart.
+# You must create a Volume in Railway and attach it to this service —
+# see README for step-by-step instructions.
+mountPath = "/data"

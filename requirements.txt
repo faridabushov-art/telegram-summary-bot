@@ -1,0 +1,11 @@
+python-telegram-bot==21.6
+langgraph==0.2.38
+langchain-anthropic==0.2.4
+langchain-openai==0.2.9
+langchain-core==0.3.19
+openai>=1.40.0,<2.0.0
+anthropic==0.34.0
+httpx==0.27.2
+python-dotenv==1.0.1
+aiosqlite==0.20.0
+aiohttp==3.9.5
