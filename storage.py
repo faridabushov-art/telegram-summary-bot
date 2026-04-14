@@ -32,6 +32,8 @@ async def insert_message(
     content: str,
 ) -> None:
     """Insert one row. Set timestamp = datetime.utcnow().isoformat()."""
+    import logging
+    logger = logging.getLogger(__name__)
     timestamp = datetime.utcnow().isoformat()
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
@@ -42,6 +44,7 @@ async def insert_message(
             (chat_id, timestamp, sender_name, sender_id, msg_type, content),
         )
         await db.commit()
+    logger.info("DB WRITE: chat_id=%d sender=%s type=%s content_len=%d", chat_id, sender_name, msg_type, len(content))
 
 
 async def fetch_messages(chat_id: int, limit: int = 200) -> list[dict]:
