@@ -12,7 +12,11 @@ logger = logging.getLogger(__name__)
 
 
 async def transcribe_voice(ogg_bytes: bytes) -> str:
-    """Transcribe a voice OGG file via OpenAI Whisper. Returns text or fallback."""
+    """Transcribe a voice OGG file via OpenAI Whisper. Returns text or fallback.
+    
+    Whisper auto-detects language. Azerbaijani (az), Russian, English and 97 other
+    languages are all supported natively — no language hint needed.
+    """
     tmp_path = None
     try:
         from openai import OpenAI
@@ -26,8 +30,13 @@ async def transcribe_voice(ogg_bytes: bytes) -> str:
             result = client.audio.transcriptions.create(
                 model="whisper-1",
                 file=audio_file,
+                response_format="verbose_json",  # includes detected language
             )
-        return result.text
+
+        lang = getattr(result, "language", "unknown")
+        text = result.text
+        logger.info("Whisper transcribed %d chars, detected language: %s", len(text), lang)
+        return text
     except Exception:
         logger.exception("Voice transcription failed")
         return "[voice message — transcription failed]"
