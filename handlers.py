@@ -3,12 +3,19 @@ handlers.py — Thin Telegram event handlers.
 
 Messages are stored directly (no agent overhead).
 The agent is only invoked for /summary generation.
+
+Branch: feature/summary-public-private
+Changes vs main:
+  - cmd_summary: admin-only check + public/private mode support
+  - _is_admin(): new helper
+  - _send_summary(): new helper to avoid duplicating send logic
 """
 
 import logging
 import os
 
 from telegram import Update
+from telegram.error import Forbidden, BadRequest
 from telegram.ext import ContextTypes
 
 import storage
@@ -18,10 +25,46 @@ import agent
 logger = logging.getLogger(__name__)
 
 
+# ── Helpers ──────────────────────────────────────────────────────────────────
+
 def _sender_name(update: Update) -> str:
     u = update.effective_user
     return f"{u.first_name} {u.last_name or ''}".strip()
 
+
+async def _is_admin(update: Update, context) -> bool:
+    """
+    Return True if the user who sent the command is a group administrator or creator.
+    Works for groups and supergroups. Always returns True in private chats
+    (admin check is not applicable there).
+    """
+    chat = update.effective_chat
+    user_id = update.effective_user.id
+
+    # In private chats there are no admins — allow through
+    if chat.type == "private":
+        return True
+
+    try:
+        member = await context.bot.get_chat_member(chat.id, user_id)
+        return member.status in ("administrator", "creator")
+    except Exception:
+        logger.exception("Failed to check admin status for user %d in chat %d", user_id, chat.id)
+        return False
+
+
+async def _send_summary(context, chat_id: int, text: str) -> None:
+    """
+    Send summary text to a chat. Tries Markdown first, falls back to plain text
+    if Telegram rejects the formatting.
+    """
+    try:
+        await context.bot.send_message(chat_id, text=text, parse_mode="Markdown")
+    except (BadRequest, Exception):
+        await context.bot.send_message(chat_id, text=text)
+
+
+# ── Message handlers (unchanged) ─────────────────────────────────────────────
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Silently store any non-command text message."""
@@ -78,7 +121,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Store a document — describe it if it's an image, otherwise log it."""
+    """Store a document — describe it if it's an image, otherwise log it as text."""
     try:
         doc = update.message.document
         mime = doc.mime_type or ""
@@ -106,19 +149,77 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         logger.exception("Failed to store document")
 
 
+# ── Commands ──────────────────────────────────────────────────────────────────
+
 async def cmd_summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Generate and post a structured summary via the LangGraph agent."""
+    """
+    Generate a structured conversation summary.
+
+    Usage:
+      /summary           → public summary posted in the group (default)
+      /summary public    → same as above, explicit
+      /summary private   → summary sent as a private DM to the caller only
+      /summary me        → alias for /summary private
+
+    Both modes are restricted to group administrators only.
+    In private chats the admin check is skipped.
+    """
+
+    chat_id = update.effective_chat.id
+    user_id = update.effective_user.id
+    language = os.getenv("SUMMARY_LANGUAGE", "English")
+
+    # ── 1. Admin check ────────────────────────────────────────────────────────
+    if not await _is_admin(update, context):
+        await update.message.reply_text(
+            "❌ Only group administrators can use /summary commands."
+        )
+        return
+
+    # ── 2. Parse the argument to determine public vs private mode ─────────────
+    args = [a.lower() for a in (context.args or [])]
+    private_mode = bool(args and args[0] in ("private", "me"))
+
+    # ── 3. Generate the summary (same logic regardless of delivery mode) ───────
     try:
-        language = os.getenv("SUMMARY_LANGUAGE", "English")
-        summary = await agent.process_summary(update.effective_chat.id, language)
-        # Try Markdown first; fall back to plain text if Telegram rejects the formatting
-        try:
-            await update.message.reply_text(summary, parse_mode="Markdown")
-        except Exception:
-            await update.message.reply_text(summary)
+        summary = await agent.process_summary(chat_id, language)
     except Exception:
-        logger.exception("Failed to generate summary")
-        await update.message.reply_text("⚠️ Could not generate summary. Please try again.")
+        logger.exception("Failed to generate summary for chat %d", chat_id)
+        await update.message.reply_text(
+            "⚠️ Could not generate summary. Please try again."
+        )
+        return
+
+    # ── 4. Deliver the summary ────────────────────────────────────────────────
+    if private_mode:
+        # Send privately to the user who triggered the command
+        try:
+            await _send_summary(context, user_id, summary)
+            # Post a short public confirmation so the group knows what happened
+            await update.message.reply_text(
+                "✅ Full summary sent privately to you."
+            )
+            logger.info(
+                "Private summary sent to user %d for chat %d", user_id, chat_id
+            )
+        except Forbidden:
+            # User has never started a private chat with the bot
+            await update.message.reply_text(
+                "⚠️ Couldn't send you a private message.\n"
+                "Please start a private chat with me first: send me any message "
+                "directly, then retry /summary private."
+            )
+        except Exception:
+            logger.exception(
+                "Failed to send private summary to user %d", user_id
+            )
+            await update.message.reply_text(
+                "⚠️ Failed to send private summary. Please try again."
+            )
+    else:
+        # Post the full summary publicly in the group (default behaviour)
+        await _send_summary(context, chat_id, summary)
+        logger.info("Public summary posted in chat %d", chat_id)
 
 
 async def cmd_clear(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -135,6 +236,8 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "👋 I'm your group conversation assistant.\n\n"
         "I silently read all messages — text, voice, and images.\n\n"
         "Commands:\n"
-        "/summary — summarize this conversation\n"
-        "/clear   — clear the log and start fresh"
+        "/summary          — post full summary in the group\n"
+        "/summary private  — send summary as a private DM (admins only)\n"
+        "/summary me       — alias for /summary private\n"
+        "/clear            — clear the log and start fresh"
     )
