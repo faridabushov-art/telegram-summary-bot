@@ -35,8 +35,12 @@ def _sender_name(update: Update) -> str:
 async def _is_admin(update: Update, context) -> bool:
     """
     Return True if the user who sent the command is a group administrator or creator.
-    Works for groups and supergroups. Always returns True in private chats
-    (admin check is not applicable there).
+
+    Uses get_chat_administrators() — works even when the bot is NOT itself an admin.
+    get_chat_member() requires the bot to be an admin in supergroups, which is
+    why we avoid it here.
+
+    Always returns True in private chats (admin concept doesn't apply).
     """
     chat = update.effective_chat
     user_id = update.effective_user.id
@@ -46,10 +50,18 @@ async def _is_admin(update: Update, context) -> bool:
         return True
 
     try:
-        member = await context.bot.get_chat_member(chat.id, user_id)
-        return member.status in ("administrator", "creator")
+        admins = await context.bot.get_chat_administrators(chat.id)
+        admin_ids = {a.user.id for a in admins}
+        is_admin = user_id in admin_ids
+        logger.info(
+            "Admin check: user_id=%d chat_id=%d result=%s",
+            user_id, chat.id, is_admin
+        )
+        return is_admin
     except Exception:
-        logger.exception("Failed to check admin status for user %d in chat %d", user_id, chat.id)
+        logger.exception(
+            "Failed to fetch admin list for chat %d — denying access", chat.id
+        )
         return False
 
 
