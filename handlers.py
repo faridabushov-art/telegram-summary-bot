@@ -37,16 +37,24 @@ async def _is_admin(update: Update, context) -> bool:
     Return True if the user who sent the command is a group administrator or creator.
 
     Uses get_chat_administrators() — works even when the bot is NOT itself an admin.
-    get_chat_member() requires the bot to be an admin in supergroups, which is
-    why we avoid it here.
+
+    Special case: user_id 1087968824 is Telegram's built-in 'Anonymous Admin' account.
+    When a real admin posts with 'Send as group' enabled, Telegram replaces their
+    user_id with this special ID. We treat it as always-admin.
 
     Always returns True in private chats (admin concept doesn't apply).
     """
     chat = update.effective_chat
     user_id = update.effective_user.id
 
-    # In private chats there are no admins — allow through
+    # Private chats — no admin concept, allow through
     if chat.type == "private":
+        return True
+
+    # Telegram Anonymous Admin — always a real admin posting under the group identity
+    ANONYMOUS_ADMIN_ID = 1087968824
+    if user_id == ANONYMOUS_ADMIN_ID:
+        logger.info("Admin check: anonymous admin posting as group in chat %d — allowed", chat.id)
         return True
 
     try:
