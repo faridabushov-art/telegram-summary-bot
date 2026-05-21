@@ -81,20 +81,42 @@ async def send_email(
 # ── Google Drive ──────────────────────────────────────────────────────────────
 
 def _build_drive_service():
-    """Build and return a Google Drive API service object, or None if not configured."""
-    sa_path = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON", "")
-    if not sa_path or not os.path.exists(sa_path):
-        logger.warning("Google Drive skipped — GOOGLE_SERVICE_ACCOUNT_JSON not set or file not found.")
+    """Build and return a Google Drive API service object, or None if not configured.
+
+    GOOGLE_SERVICE_ACCOUNT_JSON can be either:
+    - A file path (e.g. /secrets/sa.json) — used as-is on disk
+    - A raw JSON string (e.g. pasted directly in Railway env vars) — parsed via json.loads()
+    """
+    import json as _json
+
+    sa_value = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON", "").strip()
+    if not sa_value:
+        logger.warning("Google Drive skipped — GOOGLE_SERVICE_ACCOUNT_JSON not set.")
         return None
 
     try:
         from google.oauth2 import service_account
         from googleapiclient.discovery import build
 
-        creds = service_account.Credentials.from_service_account_file(
-            sa_path,
-            scopes=["https://www.googleapis.com/auth/drive.file"],
-        )
+        scopes = ["https://www.googleapis.com/auth/drive.file"]
+
+        # Try file path first
+        if os.path.exists(sa_value):
+            creds = service_account.Credentials.from_service_account_file(sa_value, scopes=scopes)
+            logger.info("Google Drive: loaded service account from file path.")
+        else:
+            # Fall back to parsing as a raw JSON string
+            try:
+                sa_info = _json.loads(sa_value)
+            except _json.JSONDecodeError:
+                logger.error(
+                    "Google Drive skipped — GOOGLE_SERVICE_ACCOUNT_JSON is neither a valid "
+                    "file path nor valid JSON."
+                )
+                return None
+            creds = service_account.Credentials.from_service_account_info(sa_info, scopes=scopes)
+            logger.info("Google Drive: loaded service account from JSON string.")
+
         service = build("drive", "v3", credentials=creds, cache_discovery=False)
         return service
     except ImportError:
