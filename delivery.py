@@ -86,6 +86,12 @@ def _build_drive_service():
     GOOGLE_SERVICE_ACCOUNT_JSON can be either:
     - A file path (e.g. /secrets/sa.json) — used as-is on disk
     - A raw JSON string (e.g. pasted directly in Railway env vars) — parsed via json.loads()
+
+    GDRIVE_IMPERSONATE_EMAIL (optional):
+    - When set, the service account uses domain-wide delegation to impersonate that user.
+    - This is required when the service account has no Drive storage quota of its own.
+    - The Google Workspace admin must grant the service account domain-wide delegation
+      with the scope https://www.googleapis.com/auth/drive.file.
     """
     import json as _json
 
@@ -100,12 +106,11 @@ def _build_drive_service():
 
         scopes = ["https://www.googleapis.com/auth/drive.file"]
 
-        # Try file path first
+        # Load credentials — file path or raw JSON string
         if os.path.exists(sa_value):
             creds = service_account.Credentials.from_service_account_file(sa_value, scopes=scopes)
             logger.info("Google Drive: loaded service account from file path.")
         else:
-            # Fall back to parsing as a raw JSON string
             try:
                 sa_info = _json.loads(sa_value)
             except _json.JSONDecodeError:
@@ -116,6 +121,13 @@ def _build_drive_service():
                 return None
             creds = service_account.Credentials.from_service_account_info(sa_info, scopes=scopes)
             logger.info("Google Drive: loaded service account from JSON string.")
+
+        # Apply domain-wide delegation if an impersonation email is configured.
+        # This makes the service account act as that user, using their Drive quota.
+        impersonate_email = os.getenv("GDRIVE_IMPERSONATE_EMAIL", "").strip()
+        if impersonate_email:
+            creds = creds.with_subject(impersonate_email)
+            logger.info("Google Drive: impersonating %s via domain-wide delegation.", impersonate_email)
 
         service = build("drive", "v3", credentials=creds, cache_discovery=False)
         return service
